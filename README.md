@@ -4,6 +4,10 @@ ntpserverstats monitors traffic to/from a Network Time Protocol (NTP)
 server, keeping historical data in a database, and generates usage
 graphs based on the usage patterns. 
 
+# Installation
+
+    apt-get -y install python-scapy
+
 # Licensing
 
 segmentcsv2kml is licensed under the 

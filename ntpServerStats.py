@@ -41,8 +41,7 @@ def analyzeCapturedPackets(ntpPackets, serverIP, captureSeconds):
     log = logging.getLogger(__name__)
     log.debug("Found {0} packets in capture".format(len(ntpPackets)))
 
-    ntpClientQueries = 0
-    ntpServerResponses = 0
+    ntpStats = { 'client': {}, 'server': {} }
 
     for currPacket in ntpPackets:
         if scapy.all.UDP not in currPacket:
@@ -58,18 +57,24 @@ def analyzeCapturedPackets(ntpPackets, serverIP, captureSeconds):
             # log.debug("NTP  request: {0}".format(
             #    currPacket.sprintf("%.time%: %15s,IP.src%:%-5s,UDP.sport% -> %15s,IP.dst%:%-5s,UDP.dport%")))
 
-            ntpClientQueries = ntpClientQueries + 1
+            if 'count' not in ntpStats['client']:
+                ntpStats['client']['count'] = 1
+            else:
+                ntpStats['client']['count'] = ntpStats['client']['count'] + 1
 
         # Is it our server to a client?
         elif currPacket[scapy.all.IP].src == serverIP and currPacket[scapy.all.UDP].dport != 123:
             # log.debug("NTP response: {0}".format(
             #    currPacket.sprintf("%.time%: %15s,IP.src%:%-5s,UDP.sport% -> %15s,IP.dst%:%-5s,UDP.dport%")))
-            ntpServerResponses = ntpServerResponses + 1
+            if 'count' not in ntpStats['server']:
+                ntpStats['server']['count'] = 1
+            else:
+                ntpStats['server']['count'] = ntpStats['server']['count'] + 1
 
     log.info("  Client queries: {0:8d} ({1:6d}/sec)".format(
-        ntpClientQueries, ntpClientQueries/captureSeconds))
+        ntpStats['client']['count'], ntpStats['client']['count'] / captureSeconds))
     log.info("Server responses: {0:8d} ({1:6d}/sec)".format(
-        ntpServerResponses, ntpServerResponses / captureSeconds))
+        ntpStats['server']['count'], ntpStats['server']['count'] / captureSeconds))
 
 
 

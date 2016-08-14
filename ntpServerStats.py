@@ -62,6 +62,13 @@ def analyzeCapturedPackets(ntpPackets, serverIP, captureSeconds):
             else:
                 ntpStats['client']['count'] = ntpStats['client']['count'] + 1
 
+            if 'bytes' not in ntpStats['client']:
+                ntpStats['client']['bytes'] = currPacket[scapy.all.IP].len
+            else:
+                ntpStats['client']['bytes'] = ntpStats['client']['bytes'] + \
+                    currPacket[scapy.all.IP].len
+                
+
         # Is it our server to a client?
         elif currPacket[scapy.all.IP].src == serverIP and currPacket[scapy.all.UDP].dport != 123:
             # log.debug("NTP response: {0}".format(
@@ -71,11 +78,27 @@ def analyzeCapturedPackets(ntpPackets, serverIP, captureSeconds):
             else:
                 ntpStats['server']['count'] = ntpStats['server']['count'] + 1
 
-    log.info("  Client queries: {0:8d} ({1:6d}/sec)".format(
-        ntpStats['client']['count'], ntpStats['client']['count'] / captureSeconds))
-    log.info("Server responses: {0:8d} ({1:6d}/sec)".format(
-        ntpStats['server']['count'], ntpStats['server']['count'] / captureSeconds))
 
+            if 'bytes' not in ntpStats['server']:
+                ntpStats['server']['bytes'] = currPacket[scapy.all.IP].len
+            else:
+                ntpStats['server']['bytes'] = ntpStats['server']['bytes'] + \
+                    currPacket[scapy.all.IP].len
+
+
+    print("\n  Client queries:\n")
+    print("\t     Requests: {0:10d}".format(ntpStats['client']['count']))
+    print("\t Request Rate: {0:10d} requests/sec".format(ntpStats['client']['count'] / captureSeconds))
+    print("\t        Bytes: {0:10d}".format(ntpStats['client']['bytes']))
+    print("\t    Byte Rate: {0:10d} bytes/sec".format(ntpStats['client']['bytes'] / captureSeconds))
+
+    print("\nServer responses:\n")
+    print("\t    Responses: {0:10d}".format(ntpStats['server']['count']))
+    print("\tResponse Rate: {0:10d} responses/sec".format(ntpStats['server']['count'] / captureSeconds))
+    print("\t        Bytes: {0:10d}".format(ntpStats['server']['bytes']))
+    print("\t    Byte Rate: {0:10d} bytes/sec".format(ntpStats['server']['bytes'] / captureSeconds))
+
+    print("")
 
 
 def parseArgs():

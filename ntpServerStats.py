@@ -20,6 +20,11 @@ import scapy.all
 import datetime
 import argparse
 import pprint
+import os
+
+
+def verifyRRDOutputDir(outputDir):
+    return os.path.isdir(outputDir)
 
 
 def startCapture(serverIP, captureSeconds):
@@ -103,22 +108,31 @@ def analyzeCapturedPackets(ntpPackets, serverIP, captureSeconds):
 
     print("")
 
+    return ntpStats
+
+
+def createUpdateRRD(ntpStats, rrdDirectory):
+    pass
+
 
 def parseArgs():
     parser = argparse.ArgumentParser(description="Monitor incoming and outgoing traffic of an NTP server")
     parser.add_argument('serverIP', help='IP address of the NTP server, e.g. 192.168.0.1')
+    parser.add_argument('rrdDir', help="Directory to store output Round-Robin Databases (RRD's)")
     parser.add_argument('sampleSeconds', nargs='?', type=int,
         help='Number of seconds to sample traffic', default=60)
     return parser.parse_args()
 
 
 def main():
-    args = parseArgs()
     logging.basicConfig(level=logging.DEBUG)
-    log = logging.getLogger(__name__)
-    ntpPackets = startCapture(args.serverIP, args.sampleSeconds)
-    analyzeCapturedPackets(ntpPackets, args.serverIP, args.sampleSeconds)
-
+    args = parseArgs()
+    if verifyRRDOutputDir(args.rrdDir) is False:
+        raise Exception('Could not open output directory for RRD files {0}'.format(
+            args.rrdDir) )
+    ntpStats = analyzeCapturedPackets( startCapture(args.serverIP, args.sampleSeconds), 
+        args.serverIP, args.sampleSeconds )
+    createUpdateRRD(ntpStats, args.rrdDir)
 
 
 if __name__ == '__main__':

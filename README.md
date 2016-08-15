@@ -6,7 +6,7 @@ graphs based on the usage patterns.
 
 # Installation
 
-    apt-get -y install python-scapy
+    apt-get -y install python-scapy python-rrdtool python-pyrrd
 
 # Licensing
 

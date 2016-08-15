@@ -22,6 +22,8 @@ import argparse
 import pprint
 import os.path
 import pyrrd.rrd
+import calendar
+import time
 
 
 def verifyRRDOutputDir(outputDir):
@@ -94,6 +96,15 @@ def analyzeCapturedPackets(ntpPackets, serverIP, captureSeconds):
                 ntpStats['server']['bytes'] = ntpStats['server']['bytes'] + \
                     currPacket[scapy.all.IP].len
 
+    # Determine per-second stats
+    ntpStats['client']['reqs_per_second']      = \
+        ntpStats['client']['count'] / captureSeconds
+    ntpStats['client']['bytes_per_second']     = \
+        ntpStats['client']['bytes'] / captureSeconds
+    ntpStats['server']['responses_per_second'] = \
+        ntpStats['server']['count'] / captureSeconds
+    ntpStats['server']['bytes_per_second'] = \
+        ntpStats['server']['bytes'] / captureSeconds
 
     print("\n  Client queries:\n")
     print("\t     Requests: {0:10d}".format(ntpStats['client']['count']))
@@ -112,25 +123,26 @@ def analyzeCapturedPackets(ntpPackets, serverIP, captureSeconds):
     return ntpStats
 
 
-def createRRDFiles(rrdDirectory, serverIP):
-    packetsRRDFile = os.path.join(rrdDirectory, 
-        'ntpserverstats-{0}-packets.rrd'.format(serverIP))
-    if not os.path.isfile(packetsRRDFile):
-        createRRD(packetsRRDFile, "requests_in", "responses_out", serverIP)
-
-    bytesRRDFile = os.path.join(rrdDirectory, 
-        'ntpserverstats-{0}-bytes.rrd'.format(serverIP))
-    if not os.path.isfile(bytesRRDFile):
-        createRRD(bytesRRDFile, "bytes_in", "bytes_out", serverIP)
+def getRRDFilename(rrdDirectory, serverIP):
+    return os.path.join( rrdDirectory, 
+        'ntpserverstats-{0}.rrd'.format(serverIP) )
 
 
-def createRRD(packetsRRDFile, inputDataSourceName, outputDataSourceName, serverIP):
+def createRRDFile(rrdDirectory, serverIP):
     log = logging.getLogger(__name__)
-    log.debug("Creating RRD file {0}".format(packetsRRDFile))
+    rrdFilename = getRRDFilename(rrdDirectory, serverIP)
+
+    if os.path.isfile(rrdFilename):
+        return
+
+    log = logging.getLogger(__name__)
+    log.info("Creating RRD file {0}".format(rrdFilename))
     roundRobinArchives = []
     dataSources = [ 
-        pyrrd.rrd.DataSource(dsName=inputDataSourceName,  dsType="GAUGE", heartbeat="10m"),
-        pyrrd.rrd.DataSource(dsName=outputDataSourceName, dsType="GAUGE", heartbeat="10m")
+        pyrrd.rrd.DataSource(dsName="requests_in",   dsType="GAUGE", heartbeat="10m"),
+        pyrrd.rrd.DataSource(dsName="responses_out", dsType="GAUGE", heartbeat="10m"),
+        pyrrd.rrd.DataSource(dsName="bytes_in",      dsType="GAUGE", heartbeat="10m"),
+        pyrrd.rrd.DataSource(dsName="bytes_out",     dsType="GAUGE", heartbeat="10m")
     ]
 
     # Samples every 5 minutes
@@ -167,14 +179,33 @@ def createRRD(packetsRRDFile, inputDataSourceName, outputDataSourceName, serverI
         pyrrd.rrd.RRA(cf='MAX', xff=0.5, steps="1w", rows="520w") 
     ]
 
-    myRRD = pyrrd.rrd.RRD(
-        packetsRRDFile, 
+    pyrrd.rrd.RRD(
+        rrdFilename, 
         ds=dataSources, 
-        rra=roundRobinArchives,
-        start="now" )
+        rra=roundRobinArchives ).create()
 
-    myRRD.create()
 
+def updateRRD(ntpStats, rrdDirectory, serverIP):
+    log = logging.getLogger(__name__)
+    rrdFilename = getRRDFilename(rrdDirectory, serverIP) 
+
+    rrdFile = pyrrd.rrd.RRD(rrdFilename)
+
+    # Get seconds since UTC epoch 
+    secondsSinceUtcEpoch = calendar.timegm(time.gmtime())
+    log.debug("Time in seconds since UTC epoch: {0}".format(
+        secondsSinceUtcEpoch))
+
+    # Add new data row (buffered)
+    rrdFile.bufferValue(secondsSinceUtcEpoch, 
+        ntpStats['client']['reqs_per_second'], 
+        ntpStats['server']['responses_per_second'],
+        ntpStats['client']['bytes_per_second'],
+        ntpStats['server']['bytes_per_second'])
+
+    # Write buffered update to disk
+    rrdFile.update()
+    
 
 def parseArgs():
     parser = argparse.ArgumentParser(description="Monitor incoming and outgoing traffic of an NTP server")
@@ -191,10 +222,10 @@ def main():
     if verifyRRDOutputDir(args.rrdDir) is False:
         raise Exception('Could not open output directory for RRD files {0}'.format(
             args.rrdDir) )
-    createRRDFiles(args.rrdDir, args.serverIP)
+    createRRDFile(args.rrdDir, args.serverIP)
     ntpStats = analyzeCapturedPackets( startCapture(args.serverIP, args.sampleSeconds), 
         args.serverIP, args.sampleSeconds )
-    # updateRRD(ntpStats, args.rrdDir)
+    updateRRD(ntpStats, args.rrdDir, args.serverIP)
 
 
 if __name__ == '__main__':

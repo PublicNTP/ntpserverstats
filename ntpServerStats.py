@@ -22,14 +22,17 @@ import argparse
 import pprint
 
 
-def startCapture(captureSeconds):
+def startCapture(serverIP, captureSeconds):
     log = logging.getLogger(__name__)
-    log.info('Start NTP packet capture @ ' + timestampString(datetime.datetime.utcnow()) + \
-        ', end @ ' + 
-        timestampString(datetime.datetime.utcnow() + datetime.timedelta(0, captureSeconds)) + \
-        " ({0} seconds)".format(captureSeconds))
+    log.info('Start NTP packet capture @ ' + timestampString(datetime.datetime.utcnow()))
+    log.info('  End NTP packet capture @ ' + 
+        timestampString(datetime.datetime.utcnow() + datetime.timedelta(0, captureSeconds))) 
+    log.info("Capture duration: {0} seconds".format(captureSeconds))
 
-    return scapy.all.sniff(filter="udp port ntp", 
+    return scapy.all.sniff(filter=
+        "(src host {0} and udp and src port ntp and not dst port ntp) ".format(serverIP) +
+        "or " +
+        "(dst host {0} and udp and not src port ntp and dst port ntp)".format(serverIP), 
         timeout=captureSeconds )
 
 
@@ -113,7 +116,7 @@ def main():
     args = parseArgs()
     logging.basicConfig(level=logging.DEBUG)
     log = logging.getLogger(__name__)
-    ntpPackets = startCapture(args.sampleSeconds)
+    ntpPackets = startCapture(args.serverIP, args.sampleSeconds)
     analyzeCapturedPackets(ntpPackets, args.serverIP, args.sampleSeconds)
 
 

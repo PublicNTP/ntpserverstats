@@ -12,7 +12,7 @@ which requires the script be run at an elevated priviledge level.
 
 # Installation
 
-    apt-get -y install git python python-scapy python-rrdtool python-pyrrd
+    sudo apt-get -y install git python python-scapy python-rrdtool python-pyrrd
     git clone https://github.com/TerryOtt/ntpserverstats
     cd ./ntpserverstats
     mkdir ./rrd

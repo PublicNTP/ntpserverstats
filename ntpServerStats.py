@@ -112,17 +112,19 @@ def analyzeCapturedPackets(ntpPackets, serverIP, captureSeconds):
     return ntpStats
 
 
-def createRRDFiles(rrdDirectory):
-    packetsRRDFile = os.path.join(rrdDirectory, 'ntpserverstats-packets.rrd') 
+def createRRDFiles(rrdDirectory, serverIP):
+    packetsRRDFile = os.path.join(rrdDirectory, 
+        'ntpserverstats-{0}-packets.rrd'.format(serverIP))
     if not os.path.isfile(packetsRRDFile):
-        createRRD(packetsRRDFile, "requests_in", "responses_out")
+        createRRD(packetsRRDFile, "requests_in", "responses_out", serverIP)
 
-    bytesRRDFile = os.path.join(rrdDirectory, 'ntpserverstats-bytes.rrd')
+    bytesRRDFile = os.path.join(rrdDirectory, 
+        'ntpserverstats-{0}-bytes.rrd'.format(serverIP))
     if not os.path.isfile(bytesRRDFile):
-        createRRD(bytesRRDFile, "bytes_in", "bytes_out")
+        createRRD(bytesRRDFile, "bytes_in", "bytes_out", serverIP)
 
 
-def createRRD(packetsRRDFile, inputDataSourceName, outputDataSourceName):
+def createRRD(packetsRRDFile, inputDataSourceName, outputDataSourceName, serverIP):
     log = logging.getLogger(__name__)
     log.debug("Creating RRD file {0}".format(packetsRRDFile))
     roundRobinArchives = []
@@ -189,7 +191,7 @@ def main():
     if verifyRRDOutputDir(args.rrdDir) is False:
         raise Exception('Could not open output directory for RRD files {0}'.format(
             args.rrdDir) )
-    createRRDFiles(args.rrdDir)
+    createRRDFiles(args.rrdDir, args.serverIP)
     ntpStats = analyzeCapturedPackets( startCapture(args.serverIP, args.sampleSeconds), 
         args.serverIP, args.sampleSeconds )
     # updateRRD(ntpStats, args.rrdDir)

@@ -20,7 +20,8 @@ import scapy.all
 import datetime
 import argparse
 import pprint
-import os
+import os.path
+import pyrrd.rrd
 
 
 def verifyRRDOutputDir(outputDir):
@@ -111,8 +112,66 @@ def analyzeCapturedPackets(ntpPackets, serverIP, captureSeconds):
     return ntpStats
 
 
-def createUpdateRRD(ntpStats, rrdDirectory):
-    pass
+def createRRDFiles(rrdDirectory):
+    packetsRRDFile = os.path.join(rrdDirectory, 'ntpserverstats-packets.rrd') 
+    if not os.path.isfile(packetsRRDFile):
+        createRRD(packetsRRDFile, "requests_in", "responses_out")
+
+    bytesRRDFile = os.path.join(rrdDirectory, 'ntpserverstats-bytes.rrd')
+    if not os.path.isfile(bytesRRDFile):
+        createRRD(bytesRRDFile, "bytes_in", "bytes_out")
+
+
+def createRRD(packetsRRDFile, inputDataSourceName, outputDataSourceName):
+    log = logging.getLogger(__name__)
+    log.debug("Creating RRD file {0}".format(packetsRRDFile))
+    roundRobinArchives = []
+    dataSources = [ 
+        pyrrd.rrd.DataSource(dsName=inputDataSourceName,  dsType="GAUGE", heartbeat="10m"),
+        pyrrd.rrd.DataSource(dsName=outputDataSourceName, dsType="GAUGE", heartbeat="10m")
+    ]
+
+    # Samples every 5 minutes
+    roundRobinArchives = [
+        # Daily archive 
+        #  1 day = 1,440 mins
+        #  1 day = 1,440 mins / 5 mins/consolidated entry = 288 5-min points
+        pyrrd.rrd.RRA(cf='MAX', xff=0.5, steps="5m", rows="1d"), 
+
+        # Weekly archive 
+        #
+        #  1 week = 10,080 minutes
+        #  10,080 mins / 15 mins/consolidated point = 672 consolidated 15-min points
+        pyrrd.rrd.RRA(cf='MAX', xff=0.5, steps="15m", rows="7d"),
+
+        # Monthly archive
+        # 
+        # 1 month = 31 days * 1,440 mins/day = 44,640 mins
+        # 44,640 mins / 60 mins/consolidated point = 774 consolidated 60-min points
+        pyrrd.rrd.RRA(cf='MAX', xff=0.5, steps="60m", rows="31d"),
+
+        # Yearly archive
+        #
+        # 1 year = 365 days * 1,440 mins/day = 525,600 mins
+        # 12 hours = 720 mins
+        # 525,600 mins / 720 mins/consolidated point = 730 consolidated 12-hour points
+        pyrrd.rrd.RRA(cf='MAX', xff=0.5, steps="12h", rows="1y"),
+
+        # Decade archive
+        #
+        # 1 week = 1,440 mins/week * 7 days/week = 10,080 mins
+        # 10 years = 520 weeks
+        # 520 weeks / 1 week/consolidated point = 520 consolidated 1 week points 
+        pyrrd.rrd.RRA(cf='MAX', xff=0.5, steps="1w", rows="520w") 
+    ]
+
+    myRRD = pyrrd.rrd.RRD(
+        packetsRRDFile, 
+        ds=dataSources, 
+        rra=roundRobinArchives,
+        start="now" )
+
+    myRRD.create()
 
 
 def parseArgs():
@@ -130,9 +189,10 @@ def main():
     if verifyRRDOutputDir(args.rrdDir) is False:
         raise Exception('Could not open output directory for RRD files {0}'.format(
             args.rrdDir) )
+    createRRDFiles(args.rrdDir)
     ntpStats = analyzeCapturedPackets( startCapture(args.serverIP, args.sampleSeconds), 
         args.serverIP, args.sampleSeconds )
-    createUpdateRRD(ntpStats, args.rrdDir)
+    # updateRRD(ntpStats, args.rrdDir)
 
 
 if __name__ == '__main__':

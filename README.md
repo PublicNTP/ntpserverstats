@@ -4,11 +4,17 @@ ntpserverstats monitors traffic to/from a Network Time Protocol (NTP)
 server, keeping historical data in a database, and generates usage
 graphs based on the usage patterns. 
 
+# Security Note
+
+This script is run as root as it acts as a packet sniffer. In order
+to do that, the network interface must be put in "promiscuous" mode,
+which requires the script be run at an elevated priviledge level.
+
 # Installation
 
     apt-get -y install git python python-scapy python-rrdtool python-pyrrd
     git clone https://github.com/TerryOtt/ntpserverstats
-    cd ntpserverstats
+    cd ./ntpserverstats
     mkdir ./rrd
     sudo bash
     cd /root
@@ -19,7 +25,6 @@ graphs based on the usage patterns.
 After the cron entry has run once and created the .rrd file, run the following
 
     sudo chown ubuntu:ubuntu /path/to/ntpserverstats/rrd/*.rrd
-    
 
 # Licensing
 

@@ -197,10 +197,6 @@ def createRRDFile(rrdDirectory, serverIP):
 
 
 def updateRRD(ntpStats, rrdDirectory, serverIP):
-
-    # Debug
-    return
-
     log = logging.getLogger(__name__)
     rrdFilename = getRRDFilename(rrdDirectory, serverIP) 
 

@@ -16,14 +16,16 @@
 
 
 import logging
-import scapy.all
 import datetime
 import argparse
 import pprint
-import os.path
 import pyrrd.rrd
 import calendar
 import time
+import subprocess
+import scapy.all
+import tempfile
+import os
 
 
 def verifyRRDOutputDir(outputDir):
@@ -37,19 +39,28 @@ def startCapture(serverIP, captureSeconds):
         timestampString(datetime.datetime.utcnow() + datetime.timedelta(0, captureSeconds))) 
     log.info("Capture duration: {0} seconds".format(captureSeconds))
 
-    return scapy.all.sniff(filter=
-        "(src host {0} and udp and src port ntp and not dst port ntp) ".format(serverIP) +
-        "or " +
-        "(dst host {0} and udp and not src port ntp and dst port ntp)".format(serverIP), 
-        timeout=captureSeconds )
+    pcapFile = tempfile.NamedTemporaryFile(delete=False)
+
+    subprocess.call(["timeout", 
+        "{0}s".format(captureSeconds), "/usr/sbin/tcpdump", 
+        "--no-promiscuous-mode", "-i", "eth0", "-w", pcapFile.name, 
+        "udp port ntp"], stderr=None, stdout=None)
+
+    return pcapFile.name
 
 
 def timestampString(startTimestamp):
     return datetime.datetime.strftime(startTimestamp, "%Y-%m-%d %H:%M:%S")
 
 
-def analyzeCapturedPackets(ntpPackets, serverIP, captureSeconds):
+def analyzeCapturedPackets(pcapFilename, serverIP, captureSeconds):
     log = logging.getLogger(__name__)
+
+    log.debug("PCap file: " + pcapFilename)
+
+    ntpPackets = scapy.all.rdpcap(pcapFilename)
+    os.remove(pcapFilename)
+
     log.debug("Found {0} packets in capture".format(len(ntpPackets)))
 
     ntpStats = { 'client': {}, 'server': {} }
@@ -186,6 +197,10 @@ def createRRDFile(rrdDirectory, serverIP):
 
 
 def updateRRD(ntpStats, rrdDirectory, serverIP):
+
+    # Debug
+    return
+
     log = logging.getLogger(__name__)
     rrdFilename = getRRDFilename(rrdDirectory, serverIP) 
 

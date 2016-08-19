@@ -65,6 +65,11 @@ def analyzeCapturedPackets(pcapFilename, serverIP, captureSeconds):
 
     ntpStats = { 'client': {}, 'server': {} }
 
+    ntpStats['client']['count'] = 0
+    ntpStats['client']['bytes'] = 0
+    ntpStats['server']['count'] = 0
+    ntpStats['server']['bytes'] = 0
+
     for currPacket in ntpPackets:
         if scapy.all.UDP not in currPacket:
             continue
@@ -79,33 +84,20 @@ def analyzeCapturedPackets(pcapFilename, serverIP, captureSeconds):
             # log.debug("NTP  request: {0}".format(
             #    currPacket.sprintf("%.time%: %15s,IP.src%:%-5s,UDP.sport% -> %15s,IP.dst%:%-5s,UDP.dport%")))
 
-            if 'count' not in ntpStats['client']:
-                ntpStats['client']['count'] = 1
-            else:
-                ntpStats['client']['count'] = ntpStats['client']['count'] + 1
+            ntpStats['client']['count'] = ntpStats['client']['count'] + 1
 
-            if 'bytes' not in ntpStats['client']:
-                ntpStats['client']['bytes'] = currPacket[scapy.all.IP].len
-            else:
-                ntpStats['client']['bytes'] = ntpStats['client']['bytes'] + \
-                    currPacket[scapy.all.IP].len
+            ntpStats['client']['bytes'] = ntpStats['client']['bytes'] + \
+                currPacket[scapy.all.IP].len
                 
 
         # Is it our server to a client?
         elif currPacket[scapy.all.IP].src == serverIP and currPacket[scapy.all.UDP].dport != 123:
             # log.debug("NTP response: {0}".format(
             #    currPacket.sprintf("%.time%: %15s,IP.src%:%-5s,UDP.sport% -> %15s,IP.dst%:%-5s,UDP.dport%")))
-            if 'count' not in ntpStats['server']:
-                ntpStats['server']['count'] = 1
-            else:
-                ntpStats['server']['count'] = ntpStats['server']['count'] + 1
+            ntpStats['server']['count'] = ntpStats['server']['count'] + 1
 
-
-            if 'bytes' not in ntpStats['server']:
-                ntpStats['server']['bytes'] = currPacket[scapy.all.IP].len
-            else:
-                ntpStats['server']['bytes'] = ntpStats['server']['bytes'] + \
-                    currPacket[scapy.all.IP].len
+            ntpStats['server']['bytes'] = ntpStats['server']['bytes'] + \
+                currPacket[scapy.all.IP].len
 
     # Determine per-second stats
     ntpStats['client']['reqs_per_second']      = \

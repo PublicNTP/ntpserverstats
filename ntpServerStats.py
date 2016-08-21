@@ -26,78 +26,82 @@ import subprocess
 import scapy.all
 import tempfile
 import os
+import datetime
+
+serverIP = ""
+
+# Global stats data
+ntpStats = {
+    'client': { 
+        'count': 0,
+        'bytes': 0 },
+
+    'server': {
+        'count': 0,
+        'bytes': 0
+    }
+}
 
 
 def verifyRRDOutputDir(outputDir):
     return os.path.isdir(outputDir)
 
 
-def startCapture(serverIP, captureSeconds):
+def updateCounts(currPacket):
+    log = logging.getLogger(__name__)
+
+    if scapy.all.UDP not in currPacket:
+        return
+    # log.debug(currPacket.sprintf("%.time%: %15s,IP.src%:%-5s,UDP.sport% -> %15s,IP.dst%:%-5s,UDP.dport%"))
+
+    #log.debug(currPacket.show())
+
+    global ntpStats
+
+    # Is it client query to our server?
+    if currPacket[scapy.all.IP].dst == serverIP:
+        # log.debug("NTP  request: {0}".format(
+        #    currPacket.sprintf("%.time%: %15s,IP.src%:%-5s,UDP.sport% -> %15s,IP.dst%:%-5s,UDP.dport%")))
+        ntpStats['client']['count'] += 1
+        ntpStats['client']['bytes'] += currPacket[scapy.all.IP].len 
+
+    # Is it our server to a client?
+    elif currPacket[scapy.all.IP].src == serverIP:
+        # log.debug("NTP response: {0}".format(
+        #    currPacket.sprintf("%.time%: %15s,IP.src%:%-5s,UDP.sport% -> %15s,IP.dst%:%-5s,UDP.dport%")))
+        ntpStats['server']['count'] += 1 
+        ntpStats['server']['bytes'] += currPacket[scapy.all.IP].len
+
+    else:
+        log.warn("Got packet in update counts that we shouldn't have")
+    
+
+
+def startCapture(serverIP, captureSeconds, maxPackets):
     log = logging.getLogger(__name__)
     log.info('Start NTP packet capture @ ' + timestampString(datetime.datetime.utcnow()))
     log.info('  End NTP packet capture @ ' + 
         timestampString(datetime.datetime.utcnow() + datetime.timedelta(0, captureSeconds))) 
     log.info("Capture duration: {0} seconds".format(captureSeconds))
 
-    pcapFile = tempfile.NamedTemporaryFile(delete=False)
+    # Do not go into promiscuous mode for sniffing
+    scapy.all.conf.promisc = False
 
-    subprocess.call(["timeout", 
-        "{0}s".format(captureSeconds), "/usr/sbin/tcpdump", 
-        "--no-promiscuous-mode", "-i", "eth0", "-w", pcapFile.name, 
-        "udp port ntp"], stderr=None, stdout=None)
-
-    return pcapFile.name
+    # Terminate sniffing when we hit the specified seconds OR packet count, whichever is first
+    scapy.all.sniff(
+        filter="udp port ntp",
+        count=maxPackets,
+        timeout=captureSeconds,
+        prn=updateCounts,
+        store=False )
 
 
 def timestampString(startTimestamp):
     return datetime.datetime.strftime(startTimestamp, "%Y-%m-%d %H:%M:%S")
 
 
-def analyzeCapturedPackets(pcapFilename, serverIP, captureSeconds):
+def computeStats(captureSeconds):
     log = logging.getLogger(__name__)
-
-    log.debug("PCap file: " + pcapFilename)
-
-    ntpPackets = scapy.all.rdpcap(pcapFilename)
-    os.remove(pcapFilename)
-
-    log.debug("Found {0} packets in capture".format(len(ntpPackets)))
-
-    ntpStats = { 'client': {}, 'server': {} }
-
-    ntpStats['client']['count'] = 0
-    ntpStats['client']['bytes'] = 0
-    ntpStats['server']['count'] = 0
-    ntpStats['server']['bytes'] = 0
-
-    for currPacket in ntpPackets:
-        if scapy.all.UDP not in currPacket:
-            continue
-        # log.debug(currPacket.sprintf("%.time%: %15s,IP.src%:%-5s,UDP.sport% -> %15s,IP.dst%:%-5s,UDP.dport%"))
-
-        #log.debug(currPacket.show())
-        
-        # Is it client query to our server?
-        if currPacket[scapy.all.IP].dst == serverIP and \
-                currPacket[scapy.all.UDP].sport != 123 and \
-                currPacket[scapy.all.UDP].dport == 123:
-            # log.debug("NTP  request: {0}".format(
-            #    currPacket.sprintf("%.time%: %15s,IP.src%:%-5s,UDP.sport% -> %15s,IP.dst%:%-5s,UDP.dport%")))
-
-            ntpStats['client']['count'] = ntpStats['client']['count'] + 1
-
-            ntpStats['client']['bytes'] = ntpStats['client']['bytes'] + \
-                currPacket[scapy.all.IP].len
-                
-
-        # Is it our server to a client?
-        elif currPacket[scapy.all.IP].src == serverIP and currPacket[scapy.all.UDP].dport != 123:
-            # log.debug("NTP response: {0}".format(
-            #    currPacket.sprintf("%.time%: %15s,IP.src%:%-5s,UDP.sport% -> %15s,IP.dst%:%-5s,UDP.dport%")))
-            ntpStats['server']['count'] = ntpStats['server']['count'] + 1
-
-            ntpStats['server']['bytes'] = ntpStats['server']['bytes'] + \
-                currPacket[scapy.all.IP].len
 
     # Determine per-second stats
     ntpStats['client']['reqs_per_second']      = \
@@ -110,16 +114,16 @@ def analyzeCapturedPackets(pcapFilename, serverIP, captureSeconds):
         ntpStats['server']['bytes'] / captureSeconds
 
     print("\n  Client queries:\n")
-    print("\t     Requests: {0:10d}".format(ntpStats['client']['count']))
-    print("\t Request Rate: {0:10d} requests/sec".format(ntpStats['client']['count'] / captureSeconds))
-    print("\t        Bytes: {0:10d}".format(ntpStats['client']['bytes']))
-    print("\t    Byte Rate: {0:10d} bytes/sec".format(ntpStats['client']['bytes'] / captureSeconds))
+    print("\t     Requests: {0:10.0f}".format(ntpStats['client']['count']))
+    print("\t Request Rate: {0:10.0f} requests/sec".format(ntpStats['client']['reqs_per_second']))
+    print("\t        Bytes: {0:10.0f}".format(ntpStats['client']['bytes']))
+    print("\t    Byte Rate: {0:10.0f} bytes/sec".format(ntpStats['client']['bytes_per_second']))
 
     print("\nServer responses:\n")
-    print("\t    Responses: {0:10d}".format(ntpStats['server']['count']))
-    print("\tResponse Rate: {0:10d} responses/sec".format(ntpStats['server']['count'] / captureSeconds))
-    print("\t        Bytes: {0:10d}".format(ntpStats['server']['bytes']))
-    print("\t    Byte Rate: {0:10d} bytes/sec".format(ntpStats['server']['bytes'] / captureSeconds))
+    print("\t    Responses: {0:10.0f}".format(ntpStats['server']['count']))
+    print("\tResponse Rate: {0:10.0f} responses/sec".format(ntpStats['server']['responses_per_second']))
+    print("\t        Bytes: {0:10.0f}".format(ntpStats['server']['bytes']))
+    print("\t    Byte Rate: {0:10.0f} bytes/sec".format(ntpStats['server']['bytes_per_second']))
 
     print("")
 
@@ -216,18 +220,34 @@ def parseArgs():
     parser.add_argument('rrdDir', help="Directory to store output Round-Robin Databases (RRD's)")
     parser.add_argument('sampleSeconds', nargs='?', type=int,
         help='Number of seconds to sample traffic', default=60)
+    parser.add_argument('maxPackets', nargs='?', type=int,
+        help='Maximum number of packets to sample', default=1000)
     return parser.parse_args()
 
 
 def main():
     logging.basicConfig(level=logging.DEBUG)
+    log = logging.getLogger(__name__)
+
     args = parseArgs()
     if verifyRRDOutputDir(args.rrdDir) is False:
         raise Exception('Could not open output directory for RRD files {0}'.format(
             args.rrdDir) )
     createRRDFile(args.rrdDir, args.serverIP)
-    ntpStats = analyzeCapturedPackets( startCapture(args.serverIP, args.sampleSeconds), 
-        args.serverIP, args.sampleSeconds )
+
+    # Note server IP so it can be used in callback
+    global serverIP
+    serverIP = args.serverIP
+
+    # Get time before/after capture, may stop early if we hit packet count
+    startCaptureTime = datetime.datetime.now()
+    startCapture(args.serverIP, args.sampleSeconds, args.maxPackets)
+    endCaptureTime = datetime.datetime.now()
+
+    captureSeconds = (endCaptureTime-startCaptureTime).total_seconds()
+    #log.debug(captureSeconds)
+    
+    ntpStats = computeStats(captureSeconds)
     updateRRD(ntpStats, args.rrdDir, args.serverIP)
 
 

@@ -185,11 +185,14 @@ def createRRDFile(rrdDirectory, serverIP):
         # 520 weeks / 1 week/consolidated point = 520 consolidated 1 week points 
         pyrrd.rrd.RRA(cf='MAX', xff=0.5, steps="1w", rows="520w") 
     ]
+    
+    # Create with start date of 2016-01-01 00:00:00 UTC
 
     pyrrd.rrd.RRD(
         rrdFilename, 
         ds=dataSources, 
-        rra=roundRobinArchives ).create()
+        rra=roundRobinArchives,
+        start=1451606400 ).create()
 
 
 def updateRRD(ntpStats, rrdDirectory, serverIP):

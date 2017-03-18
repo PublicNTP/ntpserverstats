@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-# Copyright (c) 2016 Terry D. Ott
+# Copyright (c) 2016-2017 Terry D. Ott
 #
 #   You may use, distribute, and modify this code under the terms
 #   of the MIT License.
@@ -130,14 +130,14 @@ def computeStats(captureSeconds):
     return ntpStats
 
 
-def getRRDFilename(rrdDirectory, serverIP):
+def getRRDFilename(rrdDirectory, hostID):
     return os.path.join( rrdDirectory, 
-        'ntpserverstats-{0}.rrd'.format(serverIP) )
+        'ntpserverstats-{0}.rrd'.format(hostID) )
 
 
-def createRRDFile(rrdDirectory, serverIP):
+def createRRDFile(rrdDirectory, hostID):
     log = logging.getLogger(__name__)
-    rrdFilename = getRRDFilename(rrdDirectory, serverIP)
+    rrdFilename = getRRDFilename(rrdDirectory, hostID)
 
     if os.path.isfile(rrdFilename):
         return
@@ -195,9 +195,9 @@ def createRRDFile(rrdDirectory, serverIP):
         start=1451606400 ).create()
 
 
-def updateRRD(ntpStats, rrdDirectory, serverIP):
+def updateRRD(ntpStats, rrdDirectory, hostID):
     log = logging.getLogger(__name__)
-    rrdFilename = getRRDFilename(rrdDirectory, serverIP) 
+    rrdFilename = getRRDFilename(rrdDirectory, hostID) 
 
     rrdFile = pyrrd.rrd.RRD(rrdFilename)
 
@@ -220,7 +220,8 @@ def updateRRD(ntpStats, rrdDirectory, serverIP):
 def parseArgs():
     parser = argparse.ArgumentParser(description="Monitor incoming and outgoing traffic of an NTP server")
     parser.add_argument('serverIP', help='IP address of the NTP server, e.g. 192.168.0.1')
-    parser.add_argument('rrdDir', help="Directory to store output Round-Robin Databases (RRD's)")
+    parser.add_argument('host_id', help="Unique identifier for this host, used in RRD filename")
+    parser.add_argument('rrdDir', help="Directory to store output Round-Robin Database (RRD)")
     parser.add_argument('sampleSeconds', nargs='?', type=int,
         help='Number of seconds to sample traffic', default=60)
     parser.add_argument('maxPackets', nargs='?', type=int,
@@ -236,7 +237,7 @@ def main():
     if verifyRRDOutputDir(args.rrdDir) is False:
         raise Exception('Could not open output directory for RRD files {0}'.format(
             args.rrdDir) )
-    createRRDFile(args.rrdDir, args.serverIP)
+    createRRDFile(args.rrdDir, args.host_id)
 
     # Note server IP so it can be used in callback
     global serverIP
@@ -251,7 +252,7 @@ def main():
     #log.debug(captureSeconds)
     
     ntpStats = computeStats(captureSeconds)
-    updateRRD(ntpStats, args.rrdDir, args.serverIP)
+    updateRRD(ntpStats, args.rrdDir, args.host_id)
 
 
 if __name__ == '__main__':

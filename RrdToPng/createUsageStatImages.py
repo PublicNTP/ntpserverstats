@@ -17,8 +17,8 @@
 import logging
 
 logger = logging.getLogger()
-logger.basicConfig(level=logging.DEBUG)
+logger.setLevel(level=logging.DEBUG)
 
 def s3_RRDWriteHandler(event, context):
-  logger.info("Got event: {0}".format(format(event))
+  logger.info("Got event: {0}".format(format(event)))
   return "Hello, world"

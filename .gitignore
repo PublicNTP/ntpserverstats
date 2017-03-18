@@ -1,0 +1,5 @@
+rrd/
+graphs/
+__pycache__/
+awscreds.txt
+.*.swp

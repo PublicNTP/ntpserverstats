@@ -69,9 +69,11 @@ def _generateHostStatsGraphs( hostID, rrdFilename, s3Client, s3BucketName ):
   ca.shadea = '#FFFFFF'
   ca.shadeb = '#FFFFFF'
   ca.axis = '#FFFFFF'
-  ca.frame = '#0000AA'
+  ca.frame = '#FFFFFF'
   ca.arrow = '#FFFFFF'
-  ca.mgrid = '#999999'
+  ca.mgrid = '#95989A'
+  ca.font = '#383535'
+
   for numDays in [ "0001d", "0007d", "0030d", "0364d", "3640d" ]:
 
     # Create packet graph
@@ -103,7 +105,6 @@ def _generateHostStatsGraphs( hostID, rrdFilename, s3Client, s3BucketName ):
       title="{0} packets".format(hostID),
       vertical_label="Packets/sec",
       imgformat="PNG",
-      x_grid='none',
       font="DEFAULT:0:Roberto",
       end="now",
       start="end-{}".format(numDays),
@@ -123,4 +124,3 @@ def _generateHostStatsGraphs( hostID, rrdFilename, s3Client, s3BucketName ):
     logger.info("Creating packet graph {}".format(s3GraphKey) )
 
     s3Client.upload_file( pngTempfile.name, s3BucketName, s3GraphKey )
-      

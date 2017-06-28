@@ -19,6 +19,7 @@ import logging                      # AWS kindly puts anything logged into Cloud
 import tempfile                     # Used for writing RRD and PNG to disk
 import pyrrd.graph                  # Python RRD interface
 from pyrrd.backend import bindings  # Have to specify bindings backend, as lambda doesn't have cmdline tool installed
+from pyrrd.graph import ColorAttributes
 
 
 # Set up global logging
@@ -43,13 +44,13 @@ def _processS3Write( s3WriteRecord, s3Client ):
   hostID = s3_sourceRRD[ len("rrd/"):(len(s3_sourceRRD)-len(".rrd")) ]
   logger.debug("Got host ID {} out of file {}".format(hostID, s3_sourceRRD) )
 
-  # Create tempfile where contents should be written, 
-  #   file will automatically be deleted as soon as returned 
+  # Create tempfile where contents should be written,
+  #   file will automatically be deleted as soon as returned
   #   filehandle is closed (which happens automatically when it
   #   goes out of cope
   rrdTempfile = tempfile.NamedTemporaryFile(suffix='.rrd')
   logger.info("RRD is being stored in file {}".format(rrdTempfile.name))
-  
+
   s3Client.download_file( s3_sourceBucket, s3_sourceRRD, rrdTempfile.name )
 
   # Generate host-specific stats graphs
@@ -60,47 +61,59 @@ def _processS3Write( s3WriteRecord, s3Client ):
 
   # RRD tempfile go out of scope, so files are closed and deleted
 
-  
+
 def _generateHostStatsGraphs( hostID, rrdFilename, s3Client, s3BucketName ):
+  ca = ColorAttributes()
+  ca.back = '#FFFFFF'
+  ca.canvas = '#FFFFFF'
+  ca.shadea = '#FFFFFF'
+  ca.shadeb = '#FFFFFF'
+  ca.axis = '#FFFFFF'
+  ca.frame = '#0000AA'
+  ca.arrow = '#FFFFFF'
+  ca.mgrid = '#999999'
   for numDays in [ "0001d", "0007d", "0030d", "0364d", "3640d" ]:
 
     # Create packet graph
 
-    rrdDef_RequestsIn   = pyrrd.graph.DEF(  
-      rrdfile=rrdFilename, 
+    rrdDef_RequestsIn   = pyrrd.graph.DEF(
+      rrdfile=rrdFilename,
       vname= "requests_in",
       dsName="requests_in",
       cdef="MAX" )
-    rrdDef_ResponsesOut = pyrrd.graph.DEF(  
-      rrdfile=rrdFilename, 
+    rrdDef_ResponsesOut = pyrrd.graph.DEF(
+      rrdfile=rrdFilename,
       vname ="responses_out",
       dsName="responses_out",
       cdef="MAX" )
-    rrdArea_In          = pyrrd.graph.AREA( 
-      defObj=rrdDef_RequestsIn, 
-      color="#00FF00", 
+    rrdArea_In          = pyrrd.graph.AREA(
+      defObj=rrdDef_RequestsIn,
+      color="#7FBA90",
       legend="Inbound" )
-    rrdArea_Out         = pyrrd.graph.AREA( 
-      defObj=rrdDef_ResponsesOut, 
-      color="#0000FF",
+    rrdArea_Out         = pyrrd.graph.AREA(
+      defObj=rrdDef_ResponsesOut,
+      color="#A07EB5",
       legend="Outbound" )
 
-    # Create graph 
+    # Create graph
     pngTempfile = tempfile.NamedTemporaryFile(suffix='.png')
     logger.info("PNG being stored in {}".format(pngTempfile.name))
-    graph = pyrrd.graph.Graph( 
-      pngTempfile.name, 
+    graph = pyrrd.graph.Graph(
+      pngTempfile.name,
       title="{0} packets".format(hostID),
       vertical_label="Packets/sec",
       imgformat="PNG",
+      x_grid='none',
+      font="DEFAULT:0:Roberto",
       end="now",
       start="end-{}".format(numDays),
       width=640,
       height=240,
       lower_limit=0,
+      color=ca,
       backend=bindings )
 
-    graph.data.extend( [ rrdDef_RequestsIn, rrdDef_ResponsesOut, 
+    graph.data.extend( [ rrdDef_RequestsIn, rrdDef_ResponsesOut,
       rrdArea_In, rrdArea_Out ] )
 
     graph.write()
@@ -111,5 +124,3 @@ def _generateHostStatsGraphs( hostID, rrdFilename, s3Client, s3BucketName ):
 
     s3Client.upload_file( pngTempfile.name, s3BucketName, s3GraphKey )
       
-
-

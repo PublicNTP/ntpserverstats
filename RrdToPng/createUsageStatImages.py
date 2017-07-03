@@ -69,10 +69,10 @@ def _generateHostStatsGraphs( hostID, rrdFilename, s3Client, s3BucketName ):
   ca.shadea = '#FFFFFF'
   ca.shadeb = '#FFFFFF'
   ca.axis = '#FFFFFF'
+  ca.font = '#383535'
   ca.frame = '#FFFFFF'
   ca.arrow = '#FFFFFF'
   ca.mgrid = '#95989A'
-  ca.font = '#383535'
 
   for numDays in [ "0001d", "0007d", "0030d", "0364d", "3640d" ]:
 
@@ -112,6 +112,7 @@ def _generateHostStatsGraphs( hostID, rrdFilename, s3Client, s3BucketName ):
       height=240,
       lower_limit=0,
       color=ca,
+      no_legend=True,
       backend=bindings )
 
     graph.data.extend( [ rrdDef_RequestsIn, rrdDef_ResponsesOut,

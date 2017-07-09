@@ -3,3 +3,4 @@ graphs/
 __pycache__/
 awscreds.txt
 .*.swp
+nohup.out

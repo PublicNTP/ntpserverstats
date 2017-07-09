@@ -22,69 +22,71 @@ import os
 import json
 import requests
 import pprint
-from pyrrd.backend import bindings  # Have to specify bindings backend, as lambda doesn't have cmdline tool installed
-from pyrrd.graph import ColorAttributes
+import datetime
 
 
 def main(logger):
-  _processNewRRDFiles(logger)
 
-def _processNewRRDFiles(logger):
+  sqsService = boto3.resource('sqs')
+  rrdWriteQueue = sqsService.get_queue_by_name(QueueName='PublicNTP_S3_Stats_RRD_Write')
 
+  s3Client = boto3.client('s3')
+
+  # Purge the queue to start fresh
+  _purgeSqsQueue(logger, rrdWriteQueue)
+  
   while True:
-    sqsMessages = _waitForSQSWrite(logger)
+    sqsMessages = _waitForSQSWrite(logger, rrdWriteQueue)
 
-    updatedRRDFiles = _parseRrdFromSqsMessages(sqsMessages)
+    s3Records = _parseS3RecordsFromSqsMessages(sqsMessages)
 
-    logger.info(pprint.pformat(updatedRRDFiles))
+    for currRecord in s3Records:
 
-    break
+      _processS3Write(currRecord, s3Client, logger )
+
+    #break
+
+
+def _purgeSqsQueue(logger, rrdWriteQueue):
+  # Purge the queue to start fresh
+  logger.debug("Purging SQS queue to start fresh")
+  try:
+    rrdWriteQueue.purge()
+    logger.debug("SQS queue purged")
+  except Exception as e:
+    logger.debug("Exception when purging SQS queue: {0}".format(e))
+
 
   
-def _waitForSQSWrite(logger):
-  sqs = boto3.resource('sqs')
-
-  queue = sqs.get_queue_by_name(QueueName='PublicNTP_S3_Stats_RRD_Write')
-
+def _waitForSQSWrite(logger, queue):
   receivedMsgs = []
 
   logger.info("Waiting for new RRD file writes")
-  for currMessage in queue.receive_messages(WaitTimeSeconds=20):
+  while len(receivedMsgs) == 0:
+    for currMessage in queue.receive_messages(
+        MaxNumberOfMessages=10,   
+        WaitTimeSeconds=20):
 
-    receivedMsgs.append( json.loads( json.loads(currMessage.body)['Message']) )
+      receivedMsgs.append( json.loads( json.loads(currMessage.body)['Message']) )
 
-    # Let queue know message is successfully received
-    currMessage.delete()
+      # Let queue know message is successfully received
+      currMessage.delete()
 
   logger.info("Received {0} notifications of SQS writes".format(len(receivedMsgs)))
 
   return receivedMsgs
 
 
-def _parseRrdFromSqsMessages(sqsMessages):
-  updatedRrds = {}
+def _parseS3RecordsFromSqsMessages(sqsMessages):
+  s3Records = []
   for currSqsMessage in sqsMessages:
     for currRecord in currSqsMessage['Records']:
-      updatedRrds[currRecord['s3']['object']['key']] = True
+      s3Records.append(currRecord['s3'])
 
-  return sorted(updatedRrds.keys())
-    
-    
+  return s3Records
     
 
-
-
-
-
-
-
-def s3_RRDWriteHandler(event, context):
-  s3Client = boto3.client('s3')
-  for currWriteEvent in event['Records']:
-    _processS3Write(currWriteEvent['s3'], s3Client)
-
-
-def _processS3Write( s3WriteRecord, s3Client ):
+def _processS3Write( s3WriteRecord, s3Client, logger):
   s3_sourceBucket = s3WriteRecord['bucket']['name']
   s3_sourceRRD    = s3WriteRecord['object']['key']
 
@@ -109,12 +111,12 @@ def _processS3Write( s3WriteRecord, s3Client ):
 
   # Regenerate cumulative stats graphs
 
-
-  # RRD tempfile go out of scope, so files are closed and deleted
+  # Forcibly remove reference to RRD tempfile, ensuring files are closed and deleted
+  rrdTempfile = None
 
 
 def _generateHostStatsGraphs( hostID, rrdFilename, s3Client, s3BucketName ):
-  ca = ColorAttributes()
+  ca = pyrrd.graph.ColorAttributes()
   ca.back = '#FFFFFF'
   ca.canvas = '#FFFFFF'
   ca.shadea = '#FFFFFF'
@@ -163,8 +165,7 @@ def _generateHostStatsGraphs( hostID, rrdFilename, s3Client, s3BucketName ):
       height=240,
       lower_limit=0,
       color=ca,
-      no_legend=True,
-      backend=bindings )
+      no_legend=True )
 
     graph.data.extend( [ rrdDef_RequestsIn, rrdDef_ResponsesOut,
       rrdArea_In, rrdArea_Out ] )

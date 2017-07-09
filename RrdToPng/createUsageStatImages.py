@@ -18,13 +18,64 @@ import boto3                        # AWS SDK for Python
 import logging                      # AWS kindly puts anything logged into CloudWatch
 import tempfile                     # Used for writing RRD and PNG to disk
 import pyrrd.graph                  # Python RRD interface
+import os
+import json
+import requests
+import pprint
 from pyrrd.backend import bindings  # Have to specify bindings backend, as lambda doesn't have cmdline tool installed
 from pyrrd.graph import ColorAttributes
 
 
-# Set up global logging
-logger = logging.getLogger()
-logger.setLevel(level=logging.INFO)
+def main(logger):
+  _processNewRRDFiles(logger)
+
+def _processNewRRDFiles(logger):
+
+  while True:
+    sqsMessages = _waitForSQSWrite(logger)
+
+    updatedRRDFiles = _parseRrdFromSqsMessages(sqsMessages)
+
+    logger.info(pprint.pformat(updatedRRDFiles))
+
+    break
+
+  
+def _waitForSQSWrite(logger):
+  sqs = boto3.resource('sqs')
+
+  queue = sqs.get_queue_by_name(QueueName='PublicNTP_S3_Stats_RRD_Write')
+
+  receivedMsgs = []
+
+  logger.info("Waiting for new RRD file writes")
+  for currMessage in queue.receive_messages(WaitTimeSeconds=20):
+
+    receivedMsgs.append( json.loads( json.loads(currMessage.body)['Message']) )
+
+    # Let queue know message is successfully received
+    currMessage.delete()
+
+  logger.info("Received {0} notifications of SQS writes".format(len(receivedMsgs)))
+
+  return receivedMsgs
+
+
+def _parseRrdFromSqsMessages(sqsMessages):
+  updatedRrds = {}
+  for currSqsMessage in sqsMessages:
+    for currRecord in currSqsMessage['Records']:
+      updatedRrds[currRecord['s3']['object']['key']] = True
+
+  return sorted(updatedRrds.keys())
+    
+    
+    
+
+
+
+
+
 
 
 def s3_RRDWriteHandler(event, context):
@@ -125,3 +176,12 @@ def _generateHostStatsGraphs( hostID, rrdFilename, s3Client, s3BucketName ):
     logger.info("Creating packet graph {}".format(s3GraphKey) )
 
     s3Client.upload_file( pngTempfile.name, s3BucketName, s3GraphKey )
+
+
+if __name__ == "__main__":
+  # Set up global logging
+  logging.basicConfig()
+  logger = logging.getLogger(__name__)
+  logger.setLevel(logging.INFO)
+  main(logger)
+

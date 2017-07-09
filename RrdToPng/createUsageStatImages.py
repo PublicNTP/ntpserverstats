@@ -15,14 +15,11 @@
 #   https://opensource.org/licenses/MIT
 
 import boto3                        # AWS SDK for Python
-import logging                      # AWS kindly puts anything logged into CloudWatch
+import logging                      # Nice debug logging
 import tempfile                     # Used for writing RRD and PNG to disk
 import pyrrd.graph                  # Python RRD interface
-import os
-import json
-import requests
-import pprint
-import datetime
+import json                         # Parsing data from SQS notifications
+import pprint                       # Pretty printing, debug only
 
 
 def main(logger):
@@ -152,15 +149,15 @@ def _generateHostStatsGraphs( hostID, rrdFilename, s3Client, s3BucketName ):
 
     # Create graph
     pngTempfile = tempfile.NamedTemporaryFile(suffix='.png')
-    logger.info("PNG being stored in {}".format(pngTempfile.name))
+    logger.info("PNG being stored in {0}".format(pngTempfile.name))
     graph = pyrrd.graph.Graph(
       pngTempfile.name,
-      title="{0} packets".format(hostID),
+      title=hostID,
       vertical_label="Packets/sec",
       imgformat="PNG",
-      font="DEFAULT:0:Roberto",
+      font="DEFAULT:0:Roboto",
       end="now",
-      start="end-{}".format(numDays),
+      start="end-{0}".format(numDays),
       width=640,
       height=240,
       lower_limit=0,
@@ -173,8 +170,8 @@ def _generateHostStatsGraphs( hostID, rrdFilename, s3Client, s3BucketName ):
     graph.write()
 
     # Now that graph is created, let's upload it to our PNG dir in the S3 bucket
-    s3GraphKey = "png/{}-{}-packets.png".format(hostID, numDays)
-    logger.info("Creating packet graph {}".format(s3GraphKey) )
+    s3GraphKey = "png/{0}-{1}-packets.png".format(hostID, numDays)
+    logger.info("Creating packet graph {0}".format(s3GraphKey) )
 
     s3Client.upload_file( pngTempfile.name, s3BucketName, s3GraphKey )
 

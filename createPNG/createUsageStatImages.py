@@ -152,14 +152,15 @@ def _generateHostStatsGraphs( hostID, rrdFilename, s3Client, s3BucketName ):
     logger.info("PNG being stored in {0}".format(pngTempfile.name))
     graph = pyrrd.graph.Graph(
       pngTempfile.name,
-      title=hostID,
+      #title=hostID,
       vertical_label="Packets/sec",
       imgformat="PNG",
-      font="DEFAULT:0:Roboto",
+      font="DEFAULT:12:Roboto", 
+      #font="TITLE:24:Roboto",
       end="now",
       start="end-{0}".format(numDays),
-      width=640,
-      height=240,
+      width=1280,
+      height=480,
       lower_limit=0,
       color=ca,
       no_legend=True )

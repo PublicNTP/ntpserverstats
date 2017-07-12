@@ -17,9 +17,9 @@
 import boto3                        # AWS SDK for Python
 import logging                      # Nice debug logging
 import tempfile                     # Used for writing RRD and PNG to disk
-import pyrrd.graph                  # Python RRD interface
 import json                         # Parsing data from SQS notifications
 import pprint                       # Pretty printing, debug only
+import rrdtool                      # RRDTool wrapper
 
 
 def main(logger):
@@ -113,62 +113,56 @@ def _processS3Write( s3WriteRecord, s3Client, logger):
 
 
 def _generateHostStatsGraphs( hostID, rrdFilename, s3Client, s3BucketName ):
-  ca = pyrrd.graph.ColorAttributes()
-  ca.back = '#FFFFFF'
-  ca.canvas = '#FFFFFF'
-  ca.shadea = '#FFFFFF'
-  ca.shadeb = '#FFFFFF'
-  ca.axis = '#FFFFFF'
-  ca.font = '#383535'
-  ca.frame = '#FFFFFF'
-  ca.arrow = '#FFFFFF'
-  ca.mgrid = '#95989A'
 
   for numDays in [ "0001d", "0007d", "0030d", "0364d", "3640d" ]:
 
-    # Create packet graph
-
-    rrdDef_RequestsIn   = pyrrd.graph.DEF(
-      rrdfile=rrdFilename,
-      vname= "requests_in",
-      dsName="requests_in",
-      cdef="MAX" )
-    rrdDef_ResponsesOut = pyrrd.graph.DEF(
-      rrdfile=rrdFilename,
-      vname ="responses_out",
-      dsName="responses_out",
-      cdef="MAX" )
-    rrdArea_In          = pyrrd.graph.AREA(
-      defObj=rrdDef_RequestsIn,
-      color="#7FBA90",
-      legend="Inbound" )
-    rrdArea_Out         = pyrrd.graph.AREA(
-      defObj=rrdDef_ResponsesOut,
-      color="#A07EB5",
-      legend="Outbound" )
-
-    # Create graph
     pngTempfile = tempfile.NamedTemporaryFile(suffix='.png')
     logger.info("PNG being stored in {0}".format(pngTempfile.name))
-    graph = pyrrd.graph.Graph(
+
+    #logger.info("Host ID: {0}".format(hostID))
+
+    graphArgs = [
       pngTempfile.name,
-      #title=hostID,
-      vertical_label="Packets/sec",
-      imgformat="PNG",
-      font="DEFAULT:12:Roboto", 
-      #font="TITLE:24:Roboto",
-      end="now",
-      start="end-{0}".format(numDays),
-      width=1280,
-      height=480,
-      lower_limit=0,
-      color=ca,
-      no_legend=True )
 
-    graph.data.extend( [ rrdDef_RequestsIn, rrdDef_ResponsesOut,
-      rrdArea_In, rrdArea_Out ] )
+      "--end",                  "now",
+      "--start",                "now-{0}".format(numDays),
 
-    graph.write()
+      "--lower-limit",          "0",
+
+      "--no-legend",
+
+      "--width",                "1280",
+      "--height",               "480",
+
+
+      "--title",                str(hostID),
+      "--vertical-label",       "Packets/sec",
+      "--imgformat",            "PNG",
+
+      "--font",                 "TITLE:20:Roboto",
+      "--font",                 "AXIS:10:Roboto",
+      "--font",                 "UNIT:12:Roboto",
+      "--font",                 "LEGEND:10:Roboto",
+      "--font",                 "WATERMARK:8:Roboto",
+
+      "--color",                "BACK#FFFFFF",
+      "--color",                "CANVAS#FFFFFF",
+      "--color",                "SHADEA#FFFFFF",
+      "--color",                "SHADEB#FFFFFF",
+      "--color",                "AXIS#FFFFFF",
+      "--color",                "FONT#383535",
+      "--color",                "FRAME#FFFFFF",
+      "--color",                "ARROW#FFFFFF",
+      "--color",                "MGRID#95989A",
+
+      "DEF:requests_in={0}:requests_in:MAX".format(rrdFilename),
+      "DEF:responses_out={0}:responses_out:MAX".format(rrdFilename),
+
+      "AREA:requests_in#7FBA90",
+      "AREA:responses_out#A07EB5"
+    ]
+
+    rrdtool.graph(graphArgs)
 
     # Now that graph is created, let's upload it to our PNG dir in the S3 bucket
     s3GraphKey = "png/{0}-{1}-packets.png".format(hostID, numDays)
